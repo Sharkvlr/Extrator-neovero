@@ -12,13 +12,52 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'Neovero Classificador IA' });
 });
 
+
+const CAUSAS_OFICIAIS = [
+  'BOMBA DE DRENAGEM DEFEITUOSA',
+  'BOTÃO DE ACIONAMENTO DEFEITUOSO',
+  'DRENO DESCONECTADO',
+  'FILTRO SECADOR OBSTRUÍDO',
+  'FILTRO SUJO',
+  'PORTAS OU JANELAS DO AMBIENTE ABERTAS',
+  'REDE ELÉTRICA DO COMPRESSOR DANIFICADA',
+  'REGISTRO DE ÁGUA FECHADO',
+  'NECESSIDADE DE SUBSTITUIÇÃO DO EQUIPAMENTO COMPLETO',
+  'COMPRESSOR DEFEITUOSO',
+  'CONTROLE REMOTO DEFEITUOSO OU EXTRAVIADO',
+  'NECESSIDADE DE REPOSICIONAMENTO DE EQUIPAMENTO',
+  'SENSOR DE TEMPERATURA DEFEITUOSO',
+  'CORREIA QUEBRADA',
+  'DISJUNTOR DESLIGADO',
+  'GRELHA OU DIFUSOR DESAJUSTADO',
+  'TURBINA MAL POSICIONADA',
+  'PROBLEMA NO ATUADOR DE VÁLVULA DE CONTROLE DE ÁGUA GELADA',
+  'REDE ELÉTRICA DE INTERLIGAÇÃO NECESSITANDO DE REPARO OU SUBSTITUIÇÃO',
+  'EQUIPAMENTO DESLIGADO DEVIDO A FALTA OU VARIAÇÃO DE ENERGIA',
+  'CAPACITOR DO COMPRESSOR DEFEITUOSO',
+  'REDE ELÉTRICA NECESSITADO DE REPARO OU SUBSTITUIÇÃO (PONTO DE FORÇA)',
+  'MOTOR VENTILADOR DEFEITUOSO',
+  'ISOLAMENTO TÉRMICO DANIFICADO OU ENCHARCADO',
+  'O.S. IMPOSSIBILITADA DE CONCLUSÃO',
+  'VAZAMENTO DE FLUIDO REFRIGERANTE',
+  'VELOCIDADE DO MOTOR VENTILADOR DESAJUSTADA',
+  'DEFLETOR DE AR DESAJUSTADO',
+  'EQUIPAMENTO COM SERPETINA CONGELADA',
+  'PLACA ELETRÔNICA DEFEITUOSA',
+  'O.S. AGUARDANDO PROGRAMAÇÃO DE PREVENTIVA',
+  'NECESSIDADE DE RESET',
+  'NENHUMA CAUSA RELACIONADA AOS SERVIÇOS DA UNIAR',
+  'SUJEIRA NO DRENO E BANDEJA',
+  'CONTROLE REMOTO DESCONFIGURADO',
+  'TERMOSTATO DESREGULADO',
+];
+
 app.post('/classificar', async (req, res) => {
   const { textos, causas } = req.body;
 
   if (!Array.isArray(textos) || textos.length === 0)
     return res.status(400).json({ erro: 'Envie um array "textos" não vazio.' });
-  if (!Array.isArray(causas) || causas.length === 0)
-    return res.status(400).json({ erro: 'Envie um array "causas" com a lista oficial.' });
+  // Ignora lista recebida — usa sempre a lista oficial do backend
 
   const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
   if (!ANTHROPIC_API_KEY)
@@ -125,7 +164,7 @@ FORMATO: responda SOMENTE com as causas, uma por linha, na mesma ordem das O.S. 
 
     const resultado = textos.map((_, i) => {
       const candidata = (linhas[i] || '').toUpperCase().trim();
-      const match = causas.find(c => c.toUpperCase() === candidata);
+      const match = CAUSAS_OFICIAIS.find(c => c.toUpperCase() === candidata);
       return match || 'NECESSIDADE DE RESET';
     });
 
