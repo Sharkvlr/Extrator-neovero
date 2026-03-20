@@ -1,6 +1,5 @@
-const express  = require('express');
-const cors     = require('cors');
-const fetch    = require('node-fetch');
+const express = require('express');
+const cors    = require('cors');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -9,181 +8,132 @@ app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Neovero Classificador IA' });
+  res.json({ status: 'ok', service: 'Neovero Classificador' });
 });
 
-// Lista os modelos disponíveis para sua chave
-app.get('/modelos', async (req, res) => {
-  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-  if (!GEMINI_API_KEY)
-    return res.status(500).json({ erro: 'GEMINI_API_KEY não configurada.' });
+const PADRAO = 'O.S. IMPOSSIBILITADA DE CONCLUSÃO';
 
-  const r = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`
-  );
-  const data = await r.json();
-  if (!r.ok) return res.status(r.status).json(data);
-
-  const nomes = (data.models || []).map(m => m.name);
-  res.json({ modelos: nomes });
-});
-
-app.get('/diagnostico', async (req, res) => {
-  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-  if (!GEMINI_API_KEY)
-    return res.status(500).json({ erro: 'GEMINI_API_KEY não configurada.' });
-
-  // Tenta vários modelos até um funcionar
-  const candidatos = [
-    'gemini-2.0-flash',
-    'gemini-2.0-flash-lite',
-    'gemini-1.5-flash',
-    'gemini-1.5-flash-001',
-    'gemini-1.0-pro',
-  ];
-
-  for (const modelo of candidatos) {
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: 'Responda apenas: ok' }] }],
-          generationConfig: { temperature: 0, maxOutputTokens: 10 },
-        }),
-      }
-    );
-    const data = await r.json();
-    if (r.ok) {
-      return res.json({ status: 'OK', modelo_funcionando: modelo, resposta: data.candidates?.[0]?.content?.parts?.[0]?.text });
-    }
-    console.log(`Modelo ${modelo}: ${r.status} - ${data?.error?.message}`);
-  }
-
-  res.status(502).json({ erro: 'Nenhum modelo funcionou. Acesse /modelos para ver os disponíveis.' });
-});
-
-const CAUSAS_OFICIAIS = [
-  'BOMBA DE DRENAGEM DEFEITUOSA','BOTÃO DE ACIONAMENTO DEFEITUOSO','DRENO DESCONECTADO',
-  'FILTRO SECADOR OBSTRUÍDO','FILTRO SUJO','PORTAS OU JANELAS DO AMBIENTE ABERTAS',
-  'REDE ELÉTRICA DO COMPRESSOR DANIFICADA','REGISTRO DE ÁGUA FECHADO',
-  'NECESSIDADE DE SUBSTITUIÇÃO DO EQUIPAMENTO COMPLETO','COMPRESSOR DEFEITUOSO',
-  'CONTROLE REMOTO DEFEITUOSO OU EXTRAVIADO','NECESSIDADE DE REPOSICIONAMENTO DE EQUIPAMENTO',
-  'SENSOR DE TEMPERATURA DEFEITUOSO','CORREIA QUEBRADA','DISJUNTOR DESLIGADO',
-  'GRELHA OU DIFUSOR DESAJUSTADO','TURBINA MAL POSICIONADA',
-  'PROBLEMA NO ATUADOR DE VÁLVULA DE CONTROLE DE ÁGUA GELADA',
-  'REDE ELÉTRICA DE INTERLIGAÇÃO NECESSITANDO DE REPARO OU SUBSTITUIÇÃO',
-  'EQUIPAMENTO DESLIGADO DEVIDO A FALTA OU VARIAÇÃO DE ENERGIA',
-  'CAPACITOR DO COMPRESSOR DEFEITUOSO',
-  'REDE ELÉTRICA NECESSITADO DE REPARO OU SUBSTITUIÇÃO (PONTO DE FORÇA)',
-  'MOTOR VENTILADOR DEFEITUOSO','ISOLAMENTO TÉRMICO DANIFICADO OU ENCHARCADO',
-  'O.S. IMPOSSIBILITADA DE CONCLUSÃO','VAZAMENTO DE FLUIDO REFRIGERANTE',
-  'VELOCIDADE DO MOTOR VENTILADOR DESAJUSTADA','DEFLETOR DE AR DESAJUSTADO',
-  'EQUIPAMENTO COM SERPETINA CONGELADA','PLACA ELETRÔNICA DEFEITUOSA',
-  'O.S. AGUARDANDO PROGRAMAÇÃO DE PREVENTIVA','NECESSIDADE DE RESET',
-  'NENHUMA CAUSA RELACIONADA AOS SERVIÇOS DA UNIAR','SUJEIRA NO DRENO E BANDEJA',
-  'CONTROLE REMOTO DESCONFIGURADO','TERMOSTATO DESREGULADO',
+const REGRAS = [
+  { causa: 'SUJEIRA NO DRENO E BANDEJA',
+    palavras: ['pingando','gotejando','agua caindo','dreno entupido','bandeja suja','sujeira no dreno','dreno sujo','bandeja cheia','dreno cheio','vazando agua'] },
+  { causa: 'DRENO DESCONECTADO',
+    palavras: ['dreno solto','dreno desconectado','dreno desprendido','dreno caiu','dreno fora'] },
+  { causa: 'FILTRO SUJO',
+    palavras: ['filtro sujo','filtro entupido','aleta suja','limpeza de filtro','filtro obstruido','lavagem de filtro','filtro cheio'] },
+  { causa: 'FILTRO SECADOR OBSTRUIDO',
+    palavras: ['filtro secador','secador obstruido','secador entupido'] },
+  { causa: 'TERMOSTATO DESREGULADO',
+    palavras: ['condensando','condensacao','suando','ambiente condensando','equipamento suando','gotejando condensacao'] },
+  { causa: 'EQUIPAMENTO COM SERPETINA CONGELADA',
+    palavras: ['congelado','soltando gelo','gelo na serpentina','serpentina congelada','congelou','cheio de gelo'] },
+  { causa: 'CONTROLE REMOTO DESCONFIGURADO',
+    palavras: ['muito frio','frio demais','aumentar temperatura','controle desconfigurado','controle travado','controle nao obedece','configurar controle','temperatura desregulada','desconfigurado','configuracao do controle','configurar temperatura','reclamando de frio','ambiente frio','frio excessivo'] },
+  { causa: 'CONTROLE REMOTO DEFEITUOSO OU EXTRAVIADO',
+    palavras: ['controle quebrado','controle perdido','sem controle','controle extraviado','controle defeituoso','controle sumiu','sem controle remoto','perca do controle'] },
+  { causa: 'DISJUNTOR DESLIGADO',
+    palavras: ['disjuntor desarmado','disjuntor desligado','disjuntor aberto','disjuntor caiu','disjuntor'] },
+  { causa: 'EQUIPAMENTO DESLIGADO DEVIDO A FALTA OU VARIACAO DE ENERGIA',
+    palavras: ['queda de energia','falta de energia','variacao de energia','oscilacao de energia','sem energia','energia caiu','falta de luz'] },
+  { causa: 'VAZAMENTO DE FLUIDO REFRIGERANTE',
+    palavras: ['sem gas','gas baixo','recarga de gas','vazamento de gas','carga de gas','gas acabou','falta de fluido','fluido refrigerante','falta de gas','carregando gas'] },
+  { causa: 'COMPRESSOR DEFEITUOSO',
+    palavras: ['compressor travado','compressor queimado','compressor defeituoso','compressor parou','compressor com defeito'] },
+  { causa: 'CAPACITOR DO COMPRESSOR DEFEITUOSO',
+    palavras: ['capacitor do compressor','capacitor queimado','capacitor defeituoso','capacitor'] },
+  { causa: 'MOTOR VENTILADOR DEFEITUOSO',
+    palavras: ['motor ventilador','ventilador nao gira','motor queimado','ventilador defeituoso','ventilador parou','motor do ventilador'] },
+  { causa: 'TURBINA MAL POSICIONADA',
+    palavras: ['barulho','vibracao','ruido','fazendo barulho','muito barulho','barulho excessivo','vibrando'] },
+  { causa: 'PLACA ELETRONICA DEFEITUOSA',
+    palavras: ['placa eletronica','placa defeituosa','placa queimada','placa com defeito'] },
+  { causa: 'SENSOR DE TEMPERATURA DEFEITUOSO',
+    palavras: ['sensor de temperatura','sensor defeituoso','sensor queimado','termistor'] },
+  { causa: 'BOMBA DE DRENAGEM DEFEITUOSA',
+    palavras: ['bomba de drenagem','bomba drenagem defeituosa','bomba parou','bomba de dreno'] },
+  { causa: 'BOTAO DE ACIONAMENTO DEFEITUOSO',
+    palavras: ['botao defeituoso','botao de acionamento','botao nao funciona'] },
+  { causa: 'ISOLAMENTO TERMICO DANIFICADO OU ENCHARCADO',
+    palavras: ['isolamento danificado','isolamento encharcado','isolamento termico','isolamento molhado'] },
+  { causa: 'GRELHA OU DIFUSOR DESAJUSTADO',
+    palavras: ['grelha desajustada','difusor desajustado','grelha solta','difusor solto','grelha caindo'] },
+  { causa: 'VELOCIDADE DO MOTOR VENTILADOR DESAJUSTADA',
+    palavras: ['velocidade do motor','velocidade desajustada','rotacao desajustada','rpm desajustado'] },
+  { causa: 'DEFLETOR DE AR DESAJUSTADO',
+    palavras: ['defletor desajustado','defletor solto','defletor de ar','deflator'] },
+  { causa: 'REDE ELETRICA DO COMPRESSOR DANIFICADA',
+    palavras: ['rede eletrica do compressor','fiacao do compressor','cabo do compressor'] },
+  { causa: 'REDE ELETRICA DE INTERLIGACAO NECESSITANDO DE REPARO OU SUBSTITUICAO',
+    palavras: ['rede de interligacao','interligacao danificada','fiacao de interligacao'] },
+  { causa: 'REDE ELETRICA NECESSITADO DE REPARO OU SUBSTITUICAO (PONTO DE FORCA)',
+    palavras: ['ponto de forca','rede eletrica danificada','fiacao danificada','cabo danificado'] },
+  { causa: 'REGISTRO DE AGUA FECHADO',
+    palavras: ['registro fechado','registro de agua fechado','registro de agua'] },
+  { causa: 'PROBLEMA NO ATUADOR DE VALVULA DE CONTROLE DE AGUA GELADA',
+    palavras: ['atuador','valvula de controle','agua gelada'] },
+  { causa: 'PORTAS OU JANELAS DO AMBIENTE ABERTAS',
+    palavras: ['porta aberta','janela aberta','portas abertas','janelas abertas','porta do ambiente'] },
+  { causa: 'NECESSIDADE DE REPOSICIONAMENTO DE EQUIPAMENTO',
+    palavras: ['reposicionamento','reposicionar equipamento','mudar equipamento','mover equipamento'] },
+  { causa: 'NECESSIDADE DE SUBSTITUICAO DO EQUIPAMENTO COMPLETO',
+    palavras: ['substituicao do equipamento','trocar equipamento','equipamento obsoleto','fim de vida util'] },
+  { causa: 'O.S. AGUARDANDO PROGRAMACAO DE PREVENTIVA',
+    palavras: ['aguardando preventiva','programacao de preventiva','preventiva pendente'] },
+  { causa: 'NENHUMA CAUSA RELACIONADA AOS SERVICOS DA UNIAR',
+    palavras: ['fora do escopo','responsabilidade de terceiros','empresa externa','terceiros'] },
+  { causa: 'CORREIA QUEBRADA',
+    palavras: ['correia quebrada','correia partida','correia solta'] },
+  { causa: 'NECESSIDADE DE RESET',
+    palavras: ['reset','reiniciar','reinicializar','nao liga','nao gela','parou de funcionar','so ventilando','muito quente','desligar e ligar','nao esta gelando','nao resfria'] },
 ];
 
-// Detecta qual modelo usar (tenta em ordem)
-async function getModeloDisponivel(apiKey) {
-  const candidatos = ['gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash','gemini-1.5-flash-001','gemini-1.0-pro'];
-  for (const modelo of candidatos) {
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: 'ok' }] }], generationConfig: { maxOutputTokens: 5 } }),
-      }
-    );
-    if (r.ok) return modelo;
+// Normaliza texto removendo acentos e colocando em minúsculo
+function norm(txt) {
+  return String(txt || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function tentarClassificar(texto) {
+  if (!texto || !texto.trim()) return null;
+  const t = norm(texto);
+  for (const regra of REGRAS) {
+    for (const palavra of regra.palavras) {
+      if (t.includes(palavra)) return regra.causa;
+    }
   }
   return null;
 }
 
-app.post('/classificar', async (req, res) => {
-  const { textos } = req.body;
-  if (!Array.isArray(textos) || textos.length === 0)
-    return res.status(400).json({ erro: 'Envie um array "textos" não vazio.' });
+// Classifica com prioridade: maoObra > observacao > rawText
+function classificar(maoObra, observacao, rawText) {
+  return (
+    tentarClassificar(maoObra) ||
+    tentarClassificar(observacao) ||
+    tentarClassificar(rawText) ||
+    PADRAO
+  );
+}
 
-  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-  if (!GEMINI_API_KEY)
-    return res.status(500).json({ erro: 'GEMINI_API_KEY não configurada no servidor.' });
+// Aceita tanto { itens: [{maoObra, observacao, rawText}] }
+// quanto o formato antigo { textos: ["..."] }
+app.post('/classificar', (req, res) => {
+  const { itens, textos } = req.body;
 
-  const modelo = await getModeloDisponivel(GEMINI_API_KEY);
-  if (!modelo)
-    return res.status(502).json({ erro: 'Nenhum modelo Gemini disponível para esta chave.' });
-
-  const prompt = `Você é um técnico especialista em manutenção de ar-condicionado hospitalar. Classifique cada O.S. com exatamente uma das causas abaixo.
-
-CAUSAS PERMITIDAS (retorne EXATAMENTE como escrito):
-${CAUSAS_OFICIAIS.join('\n')}
-
-PRIORIDADE:
-1. Se houver observação do TÉCNICO (mão de obra) → use ela como base principal
-2. Se não houver → use a reclamação do paciente/funcionário
-
-REGRAS:
-- Pingando, gotejando, água caindo, dreno entupido, bandeja suja → SUJEIRA NO DRENO E BANDEJA
-- Dreno solto, desconectado → DRENO DESCONECTADO
-- Filtro sujo, aleta suja, equipamento sujo, limpeza de filtro → FILTRO SUJO
-- Condensando, ambiente condensando, equipamento suando → TERMOSTATO DESREGULADO
-- Congelado, soltando gelo, gelo na serpentina → EQUIPAMENTO COM SERPETINA CONGELADA
-- Muito frio, frio demais, solicitam aumentar temperatura → CONTROLE REMOTO DESCONFIGURADO
-- Controle não obedece, controle travado, configurar controle → CONTROLE REMOTO DESCONFIGURADO
-- Controle quebrado, controle perdido, sem controle → CONTROLE REMOTO DEFEITUOSO OU EXTRAVIADO
-- Disjuntor desarmado → DISJUNTOR DESLIGADO
-- Queda de energia, falta de energia → EQUIPAMENTO DESLIGADO DEVIDO A FALTA OU VARIAÇÃO DE ENERGIA
-- Sem gás, gás baixo, recarga de gás → VAZAMENTO DE FLUIDO REFRIGERANTE
-- Compressor travado, compressor queimado → COMPRESSOR DEFEITUOSO
-- Motor ventilador com defeito, ventilador não gira → MOTOR VENTILADOR DEFEITUOSO
-- Barulho, vibração, ruído → TURBINA MAL POSICIONADA
-- Não gela, muito quente, só ventilando (sem observação técnica) → NECESSIDADE DE RESET
-- Não liga, parou de funcionar → NECESSIDADE DE RESET
-- Porta aberta, janela aberta → PORTAS OU JANELAS DO AMBIENTE ABERTAS
-- Fora do escopo, responsabilidade de terceiros → NENHUMA CAUSA RELACIONADA AOS SERVIÇOS DA UNIAR
-
-FORMATO: responda SOMENTE com as causas, uma por linha, na mesma ordem das O.S. Nenhuma explicação.
-
-${textos.map((t, i) => `OS${i + 1}: ${t}`).join('\n')}`;
-
-  try {
-    const apiResp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 1500 },
-        }),
-      }
+  // Formato novo: campos separados
+  if (Array.isArray(itens) && itens.length > 0) {
+    const causas = itens.map(item =>
+      classificar(item.maoObra, item.observacao, item.rawText)
     );
-
-    if (!apiResp.ok) {
-      const errData = await apiResp.json().catch(() => ({}));
-      return res.status(502).json({ erro: 'Erro Gemini', detalhe: errData?.error?.message });
-    }
-
-    const apiData = await apiResp.json();
-    const texto = apiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const linhas = texto.split('\n').map(l => l.trim()).filter(Boolean);
-
-    const resultado = textos.map((_, i) => {
-      const candidata = (linhas[i] || '').toUpperCase().trim();
-      const match = CAUSAS_OFICIAIS.find(c => c.toUpperCase() === candidata);
-      return match || 'NECESSIDADE DE RESET';
-    });
-
-    res.json({ causas: resultado, modelo_usado: modelo });
-
-  } catch (err) {
-    res.status(500).json({ erro: 'Erro interno: ' + err.message });
+    return res.json({ causas });
   }
+
+  // Formato antigo: texto único (retrocompatível)
+  if (Array.isArray(textos) && textos.length > 0) {
+    const causas = textos.map(t => tentarClassificar(t) || PADRAO);
+    return res.json({ causas });
+  }
+
+  res.status(400).json({ erro: 'Envie "itens" ou "textos" no body.' });
 });
 
 app.listen(PORT, () => {
-  console.log(`Neovero Classificador IA rodando na porta ${PORT}`);
+  console.log(`Neovero Classificador rodando na porta ${PORT}`);
 });
