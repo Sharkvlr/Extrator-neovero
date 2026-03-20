@@ -12,19 +12,39 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'Neovero Classificador IA' });
 });
 
-// ✅ NOVO: Endpoint de diagnóstico para testar a chave Gemini
+// Lista os modelos disponíveis para sua chave
+app.get('/modelos', async (req, res) => {
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  if (!GEMINI_API_KEY)
+    return res.status(500).json({ erro: 'GEMINI_API_KEY não configurada.' });
+
+  const r = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`
+  );
+  const data = await r.json();
+  if (!r.ok) return res.status(r.status).json(data);
+
+  const nomes = (data.models || []).map(m => m.name);
+  res.json({ modelos: nomes });
+});
+
 app.get('/diagnostico', async (req, res) => {
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  if (!GEMINI_API_KEY)
+    return res.status(500).json({ erro: 'GEMINI_API_KEY não configurada.' });
 
-  if (!GEMINI_API_KEY) {
-    return res.status(500).json({
-      erro: 'GEMINI_API_KEY não está configurada nas variáveis de ambiente do Railway.'
-    });
-  }
+  // Tenta vários modelos até um funcionar
+  const candidatos = [
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-001',
+    'gemini-1.0-pro',
+  ];
 
-  try {
-    const testResp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
+  for (const modelo of candidatos) {
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -34,70 +54,67 @@ app.get('/diagnostico', async (req, res) => {
         }),
       }
     );
-
-    const data = await testResp.json();
-
-    if (!testResp.ok) {
-      return res.status(502).json({
-        erro: 'Chave inválida ou sem permissão.',
-        detalhe: data
-      });
+    const data = await r.json();
+    if (r.ok) {
+      return res.json({ status: 'OK', modelo_funcionando: modelo, resposta: data.candidates?.[0]?.content?.parts?.[0]?.text });
     }
-
-    res.json({ status: 'Gemini OK', resposta: data.candidates?.[0]?.content?.parts?.[0]?.text });
-  } catch (err) {
-    res.status(500).json({ erro: 'Falha na conexão com Gemini: ' + err.message });
+    console.log(`Modelo ${modelo}: ${r.status} - ${data?.error?.message}`);
   }
+
+  res.status(502).json({ erro: 'Nenhum modelo funcionou. Acesse /modelos para ver os disponíveis.' });
 });
 
 const CAUSAS_OFICIAIS = [
-  'BOMBA DE DRENAGEM DEFEITUOSA',
-  'BOTÃO DE ACIONAMENTO DEFEITUOSO',
-  'DRENO DESCONECTADO',
-  'FILTRO SECADOR OBSTRUÍDO',
-  'FILTRO SUJO',
-  'PORTAS OU JANELAS DO AMBIENTE ABERTAS',
-  'REDE ELÉTRICA DO COMPRESSOR DANIFICADA',
-  'REGISTRO DE ÁGUA FECHADO',
-  'NECESSIDADE DE SUBSTITUIÇÃO DO EQUIPAMENTO COMPLETO',
-  'COMPRESSOR DEFEITUOSO',
-  'CONTROLE REMOTO DEFEITUOSO OU EXTRAVIADO',
-  'NECESSIDADE DE REPOSICIONAMENTO DE EQUIPAMENTO',
-  'SENSOR DE TEMPERATURA DEFEITUOSO',
-  'CORREIA QUEBRADA',
-  'DISJUNTOR DESLIGADO',
-  'GRELHA OU DIFUSOR DESAJUSTADO',
-  'TURBINA MAL POSICIONADA',
+  'BOMBA DE DRENAGEM DEFEITUOSA','BOTÃO DE ACIONAMENTO DEFEITUOSO','DRENO DESCONECTADO',
+  'FILTRO SECADOR OBSTRUÍDO','FILTRO SUJO','PORTAS OU JANELAS DO AMBIENTE ABERTAS',
+  'REDE ELÉTRICA DO COMPRESSOR DANIFICADA','REGISTRO DE ÁGUA FECHADO',
+  'NECESSIDADE DE SUBSTITUIÇÃO DO EQUIPAMENTO COMPLETO','COMPRESSOR DEFEITUOSO',
+  'CONTROLE REMOTO DEFEITUOSO OU EXTRAVIADO','NECESSIDADE DE REPOSICIONAMENTO DE EQUIPAMENTO',
+  'SENSOR DE TEMPERATURA DEFEITUOSO','CORREIA QUEBRADA','DISJUNTOR DESLIGADO',
+  'GRELHA OU DIFUSOR DESAJUSTADO','TURBINA MAL POSICIONADA',
   'PROBLEMA NO ATUADOR DE VÁLVULA DE CONTROLE DE ÁGUA GELADA',
   'REDE ELÉTRICA DE INTERLIGAÇÃO NECESSITANDO DE REPARO OU SUBSTITUIÇÃO',
   'EQUIPAMENTO DESLIGADO DEVIDO A FALTA OU VARIAÇÃO DE ENERGIA',
   'CAPACITOR DO COMPRESSOR DEFEITUOSO',
   'REDE ELÉTRICA NECESSITADO DE REPARO OU SUBSTITUIÇÃO (PONTO DE FORÇA)',
-  'MOTOR VENTILADOR DEFEITUOSO',
-  'ISOLAMENTO TÉRMICO DANIFICADO OU ENCHARCADO',
-  'O.S. IMPOSSIBILITADA DE CONCLUSÃO',
-  'VAZAMENTO DE FLUIDO REFRIGERANTE',
-  'VELOCIDADE DO MOTOR VENTILADOR DESAJUSTADA',
-  'DEFLETOR DE AR DESAJUSTADO',
-  'EQUIPAMENTO COM SERPETINA CONGELADA',
-  'PLACA ELETRÔNICA DEFEITUOSA',
-  'O.S. AGUARDANDO PROGRAMAÇÃO DE PREVENTIVA',
-  'NECESSIDADE DE RESET',
-  'NENHUMA CAUSA RELACIONADA AOS SERVIÇOS DA UNIAR',
-  'SUJEIRA NO DRENO E BANDEJA',
-  'CONTROLE REMOTO DESCONFIGURADO',
-  'TERMOSTATO DESREGULADO',
+  'MOTOR VENTILADOR DEFEITUOSO','ISOLAMENTO TÉRMICO DANIFICADO OU ENCHARCADO',
+  'O.S. IMPOSSIBILITADA DE CONCLUSÃO','VAZAMENTO DE FLUIDO REFRIGERANTE',
+  'VELOCIDADE DO MOTOR VENTILADOR DESAJUSTADA','DEFLETOR DE AR DESAJUSTADO',
+  'EQUIPAMENTO COM SERPETINA CONGELADA','PLACA ELETRÔNICA DEFEITUOSA',
+  'O.S. AGUARDANDO PROGRAMAÇÃO DE PREVENTIVA','NECESSIDADE DE RESET',
+  'NENHUMA CAUSA RELACIONADA AOS SERVIÇOS DA UNIAR','SUJEIRA NO DRENO E BANDEJA',
+  'CONTROLE REMOTO DESCONFIGURADO','TERMOSTATO DESREGULADO',
 ];
+
+// Detecta qual modelo usar (tenta em ordem)
+async function getModeloDisponivel(apiKey) {
+  const candidatos = ['gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash','gemini-1.5-flash-001','gemini-1.0-pro'];
+  for (const modelo of candidatos) {
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: 'ok' }] }], generationConfig: { maxOutputTokens: 5 } }),
+      }
+    );
+    if (r.ok) return modelo;
+  }
+  return null;
+}
 
 app.post('/classificar', async (req, res) => {
   const { textos } = req.body;
-
   if (!Array.isArray(textos) || textos.length === 0)
     return res.status(400).json({ erro: 'Envie um array "textos" não vazio.' });
 
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   if (!GEMINI_API_KEY)
     return res.status(500).json({ erro: 'GEMINI_API_KEY não configurada no servidor.' });
+
+  const modelo = await getModeloDisponivel(GEMINI_API_KEY);
+  if (!modelo)
+    return res.status(502).json({ erro: 'Nenhum modelo Gemini disponível para esta chave.' });
 
   const prompt = `Você é um técnico especialista em manutenção de ar-condicionado hospitalar. Classifique cada O.S. com exatamente uma das causas abaixo.
 
@@ -128,20 +145,13 @@ REGRAS:
 - Porta aberta, janela aberta → PORTAS OU JANELAS DO AMBIENTE ABERTAS
 - Fora do escopo, responsabilidade de terceiros → NENHUMA CAUSA RELACIONADA AOS SERVIÇOS DA UNIAR
 
-ATENÇÃO:
-- "Condensando" é TERMOSTATO DESREGULADO, não SUJEIRA NO DRENO
-- "Muito frio" é CONTROLE REMOTO DESCONFIGURADO
-- "Quente/não gela" sem detalhe técnico é NECESSIDADE DE RESET, não DISJUNTOR
-- "Sujo/filtro sujo" é FILTRO SUJO
-
 FORMATO: responda SOMENTE com as causas, uma por linha, na mesma ordem das O.S. Nenhuma explicação.
 
 ${textos.map((t, i) => `OS${i + 1}: ${t}`).join('\n')}`;
 
   try {
-    // ✅ CORRIGIDO: modelo atualizado para gemini-1.5-flash
     const apiResp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -154,12 +164,7 @@ ${textos.map((t, i) => `OS${i + 1}: ${t}`).join('\n')}`;
 
     if (!apiResp.ok) {
       const errData = await apiResp.json().catch(() => ({}));
-      console.error('Erro Gemini:', JSON.stringify(errData));
-      return res.status(502).json({
-        erro: 'Erro na API Gemini',
-        status: apiResp.status,
-        detalhe: errData?.error?.message || 'Sem detalhes'
-      });
+      return res.status(502).json({ erro: 'Erro Gemini', detalhe: errData?.error?.message });
     }
 
     const apiData = await apiResp.json();
@@ -172,10 +177,9 @@ ${textos.map((t, i) => `OS${i + 1}: ${t}`).join('\n')}`;
       return match || 'NECESSIDADE DE RESET';
     });
 
-    res.json({ causas: resultado });
+    res.json({ causas: resultado, modelo_usado: modelo });
 
   } catch (err) {
-    console.error('Erro interno:', err.message);
     res.status(500).json({ erro: 'Erro interno: ' + err.message });
   }
 });
