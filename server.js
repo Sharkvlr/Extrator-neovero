@@ -12,6 +12,44 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'Neovero Classificador IA' });
 });
 
+// ✅ NOVO: Endpoint de diagnóstico para testar a chave Gemini
+app.get('/diagnostico', async (req, res) => {
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+  if (!GEMINI_API_KEY) {
+    return res.status(500).json({
+      erro: 'GEMINI_API_KEY não está configurada nas variáveis de ambiente do Railway.'
+    });
+  }
+
+  try {
+    const testResp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: 'Responda apenas: ok' }] }],
+          generationConfig: { temperature: 0, maxOutputTokens: 10 },
+        }),
+      }
+    );
+
+    const data = await testResp.json();
+
+    if (!testResp.ok) {
+      return res.status(502).json({
+        erro: 'Chave inválida ou sem permissão.',
+        detalhe: data
+      });
+    }
+
+    res.json({ status: 'Gemini OK', resposta: data.candidates?.[0]?.content?.parts?.[0]?.text });
+  } catch (err) {
+    res.status(500).json({ erro: 'Falha na conexão com Gemini: ' + err.message });
+  }
+});
+
 const CAUSAS_OFICIAIS = [
   'BOMBA DE DRENAGEM DEFEITUOSA',
   'BOTÃO DE ACIONAMENTO DEFEITUOSO',
@@ -101,8 +139,9 @@ FORMATO: responda SOMENTE com as causas, uma por linha, na mesma ordem das O.S. 
 ${textos.map((t, i) => `OS${i + 1}: ${t}`).join('\n')}`;
 
   try {
+    // ✅ CORRIGIDO: modelo atualizado para gemini-2.0-flash
     const apiResp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -114,8 +153,13 @@ ${textos.map((t, i) => `OS${i + 1}: ${t}`).join('\n')}`;
     );
 
     if (!apiResp.ok) {
-      const errText = await apiResp.text();
-      return res.status(502).json({ erro: 'Erro na API Gemini: ' + errText });
+      const errData = await apiResp.json().catch(() => ({}));
+      console.error('Erro Gemini:', JSON.stringify(errData));
+      return res.status(502).json({
+        erro: 'Erro na API Gemini',
+        status: apiResp.status,
+        detalhe: errData?.error?.message || 'Sem detalhes'
+      });
     }
 
     const apiData = await apiResp.json();
@@ -131,6 +175,7 @@ ${textos.map((t, i) => `OS${i + 1}: ${t}`).join('\n')}`;
     res.json({ causas: resultado });
 
   } catch (err) {
+    console.error('Erro interno:', err.message);
     res.status(500).json({ erro: 'Erro interno: ' + err.message });
   }
 });
