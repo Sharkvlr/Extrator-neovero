@@ -18,10 +18,11 @@ const REGRAS = [
     palavras: ['pingando','gotejando','agua caindo','dreno entupido','bandeja suja','sujeira no dreno','dreno sujo','bandeja cheia','dreno cheio','vazando agua'] },
   { causa: 'DRENO DESCONECTADO',
     palavras: ['dreno solto','dreno desconectado','dreno desprendido','dreno caiu','dreno fora'] },
-  { causa: 'FILTRO SUJO',
-    palavras: ['filtro sujo','filtro entupido','aleta suja','limpeza de filtro','filtro obstruido','lavagem de filtro','filtro cheio'] },
   { causa: 'FILTRO SECADOR OBSTRUIDO',
     palavras: ['filtro secador','secador obstruido','secador entupido'] },
+  { causa: 'NECESSIDADE DE MANUTENCAO PREVENTIVA TIPO 1 (NAO PROGRAMADA)',
+    palavras: ['filtro sujo','filtro entupido','aleta suja','limpeza de filtro','filtro obstruido','lavagem de filtro','filtro cheio'] },
+
   { causa: 'TERMOSTATO DESREGULADO',
     palavras: ['condensando','condensacao','suando','ambiente condensando','equipamento suando','gotejando condensacao'] },
   { causa: 'EQUIPAMENTO COM SERPETINA CONGELADA',
