@@ -24,7 +24,7 @@ app.get('/diagnostico', async (req, res) => {
 
   try {
     const testResp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -139,9 +139,9 @@ FORMATO: responda SOMENTE com as causas, uma por linha, na mesma ordem das O.S. 
 ${textos.map((t, i) => `OS${i + 1}: ${t}`).join('\n')}`;
 
   try {
-    // ✅ CORRIGIDO: modelo atualizado para gemini-2.0-flash
+    // ✅ CORRIGIDO: modelo atualizado para gemini-1.5-flash
     const apiResp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
