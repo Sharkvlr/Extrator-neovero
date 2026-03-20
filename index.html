@@ -301,9 +301,9 @@ async function classifyAll(rows, onProgress){
       });
       if(!resp.ok) throw new Error('HTTP '+resp.status);
       const data = await resp.json();
-      lote.forEach((r, idx) => { r['CAUSA'] = data.causas?.[idx] || 'O.S. IMPOSSIBILITADA DE CONCLUSÃO'; });
+      lote.forEach((r, idx) => { r['CAUSA'] = data.causas?.[idx] || 'O.S. IMPOSSIBILITADA DE CONCLUSÃO'; r['SERVIÇO'] = data.servicos?.[idx] || ''; });
     } catch(e) {
-      lote.forEach(r => { r['CAUSA'] = 'O.S. IMPOSSIBILITADA DE CONCLUSÃO'; });
+      lote.forEach(r => { r['CAUSA'] = 'O.S. IMPOSSIBILITADA DE CONCLUSÃO'; r['SERVIÇO'] = ''; });
     }
 
     onProgress(i + lote.length, total);
